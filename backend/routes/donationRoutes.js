@@ -68,4 +68,20 @@ router.post('/donate', protect, [
   }
 });
 
+// Delete a campaign (Admin only)
+router.delete('/campaigns/:id', protect, admin, async (req, res) => {
+  try {
+    const campaignId = req.params.id;
+    const deletedCampaign = await Campaign.findByIdAndDelete(campaignId);
+    
+    if (!deletedCampaign) {
+      return res.status(404).json({ message: 'Campaign not found' });
+    }
+    
+    res.json({ message: 'Campaign deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 module.exports = router;

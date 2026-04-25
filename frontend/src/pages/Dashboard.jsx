@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Wallet, Info, Plus } from 'lucide-react';
+import { Wallet, Info, Plus, Trash2 } from 'lucide-react';
 
 const Dashboard = () => {
   const { user, api } = useAuth();
@@ -8,6 +8,7 @@ const Dashboard = () => {
   const [amount, setAmount] = useState('');
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
   const [msg, setMsg] = useState({ type: '', text: '' });
+  const [isPaying, setIsPaying] = useState(false);
   
   // Admin fields
   const [title, setTitle] = useState('');
@@ -37,19 +38,25 @@ const Dashboard = () => {
       return setMsg({ type: 'error', text: 'Enter a valid amount deeper than 0' });
     }
 
-    try {
-      const config = {
-        headers: {
-          Authorization: `Bearer ${user.token}`
-        }
-      };
-      await api.post('/donations/donate', { campaignId: selectedCampaignId, amount: Number(amount) }, config);
-      setMsg({ type: 'success', text: `Donation of $${amount} successful!` });
-      setAmount('');
-      fetchCampaigns(); // refresh amounts
-    } catch (error) {
-      setMsg({ type: 'error', text: error.response?.data?.message || 'Donation failed' });
-    }
+    setIsPaying(true);
+
+    setTimeout(async () => {
+      try {
+        const config = {
+          headers: {
+            Authorization: `Bearer ${user.token}`
+          }
+        };
+        await api.post('/donations/donate', { campaignId: selectedCampaignId, amount: Number(amount) }, config);
+        setMsg({ type: 'success', text: `Donation of ₹${amount} successful!` });
+        setAmount('');
+        fetchCampaigns(); // refresh amounts
+      } catch (error) {
+        setMsg({ type: 'error', text: error.response?.data?.message || 'Donation failed' });
+      } finally {
+        setIsPaying(false);
+      }
+    }, 10000); // 10 seconds delay for dummy payment
   };
 
   const handleCreateCampaign = async (e) => {
@@ -73,8 +80,36 @@ const Dashboard = () => {
     }
   };
 
+  const handleDeleteCampaign = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this campaign?")) return;
+    setMsg({ type: '', text: '' });
+    try {
+      const config = {
+        headers: {
+          Authorization: `Bearer ${user.token}`
+        }
+      };
+      await api.delete(`/donations/campaigns/${id}`, config);
+      setMsg({ type: 'success', text: 'Campaign deleted successfully!' });
+      // Clear selected campaign if it was deleted
+      if (selectedCampaignId === id) setSelectedCampaignId('');
+      fetchCampaigns();
+    } catch (error) {
+      setMsg({ type: 'error', text: error.response?.data?.message || 'Failed to delete campaign' });
+    }
+  };
+
   return (
     <div className="w-full bg-slate-50 min-h-screen py-12 px-4 md:px-8">
+      {isPaying && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center max-w-sm w-full mx-4 border border-slate-100">
+            <div className="w-16 h-16 border-4 border-slate-100 border-t-accent-500 rounded-full animate-spin mb-6"></div>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">Processing Payment</h2>
+            <p className="text-slate-500 text-center text-sm">Please wait while we securely process your transaction. Do not close this window.</p>
+          </div>
+        </div>
+      )}
       <div className="max-w-7xl mx-auto space-y-8">
         
         <header className="flex flex-col md:flex-row justify-between items-center bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
@@ -105,13 +140,24 @@ const Dashboard = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {campaigns.map(c => (
                   <div key={c._id} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition">
-                    <h3 className="font-bold text-xl text-slate-800 mb-2">{c.title}</h3>
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-bold text-xl text-slate-800">{c.title}</h3>
+                      {user.role === 'admin' && (
+                        <button 
+                          onClick={() => handleDeleteCampaign(c._id)}
+                          className="text-rose-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-full transition-colors flex-shrink-0"
+                          title="Delete Campaign"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
+                    </div>
                     <p className="text-slate-500 text-sm mb-4 line-clamp-2">{c.description}</p>
                     
                     <div className="mb-4">
                       <div className="flex justify-between text-sm font-medium mb-1">
-                        <span className="text-primary-600">${c.raisedAmount}</span>
-                        <span className="text-slate-400">of ${c.goalAmount}</span>
+                        <span className="text-primary-600">₹{c.raisedAmount}</span>
+                        <span className="text-slate-400">of ₹{c.goalAmount}</span>
                       </div>
                       <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
                         <div className="bg-accent-500 h-2.5 rounded-full" style={{ width: `${Math.min((c.raisedAmount/c.goalAmount)*100, 100)}%` }}></div>
@@ -144,7 +190,7 @@ const Dashboard = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-primary-200 mb-1">Amount ($)</label>
+                  <label className="block text-sm text-primary-200 mb-1">Amount (₹)</label>
                   <input 
                     type="number" 
                     className="w-full bg-primary-950/50 border border-primary-700 rounded-xl px-4 py-3 text-white focus:outline-none"
@@ -153,7 +199,7 @@ const Dashboard = () => {
                     onChange={(e) => setAmount(e.target.value)}
                   />
                 </div>
-                <button type="submit" className="w-full bg-accent-500 hover:bg-accent-400 text-white font-bold py-4 rounded-xl transition shadow-lg shadow-accent-500/20 active:scale-[0.98] mt-2">
+                <button type="submit" disabled={isPaying} className="w-full bg-accent-500 hover:bg-accent-400 disabled:bg-accent-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl transition shadow-lg shadow-accent-500/20 active:scale-[0.98] mt-2">
                   Donate Now
                 </button>
               </form>
